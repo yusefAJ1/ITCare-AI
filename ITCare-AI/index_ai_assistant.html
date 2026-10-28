@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITCare AI | IT Support Dashboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: #f3f6fb; color: #172033; }
+        header { background: #14213d; color: white; padding: 24px 7%; }
+        header h1 { margin: 0 0 8px; }
+        header p { margin: 0; color: #cbd5e1; }
+        main { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+        .panel { background: white; padding: 24px; border-radius: 12px; margin-bottom: 22px; box-shadow: 0 4px 16px #1720330d; }
+        .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        input, textarea, select, button { padding: 12px; border-radius: 7px; font-size: 15px; }
+        input, textarea, select { width: 100%; border: 1px solid #cbd5e1; background: white; color: #172033; }
+        button { border: none; background: #2563eb; color: white; cursor: pointer; margin-top: 12px; }
+        button:hover { background: #1d4ed8; }
+        button:disabled { opacity: .6; cursor: wait; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        th { background: #f8fafc; }
+        .message { margin-top: 12px; min-height: 1em; }
+        .ticket-form { display: grid; gap: 8px; }
+        .ticket-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+        .diagnosis-result { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 16px; margin-top: 16px; }
+        .diagnosis-result h3 { margin-top: 0; }
+        .diagnosis-result li { margin-bottom: 8px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+        .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; }
+        .stat-card p { margin: 0 0 8px; color: #475569; font-size: 14px; }
+        .stat-card strong { font-size: 28px; }
+        @media (max-width: 750px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 650px) { .form-grid, .ticket-filters { grid-template-columns: 1fr; } .panel { padding: 16px; } }
+    </style>
+</head>
+<body>
+<header>
+    <h1>ITCare AI</h1>
+    <p>IT Asset Management & Support Dashboard</p>
+</header>
+
+<main>
+    <section class="panel">
+        <h2>Dashboard Overview</h2>
+        <div class="stats-grid" aria-live="polite">
+            <div class="stat-card"><p>Total Tickets</p><strong id="totalTickets">0</strong></div>
+            <div class="stat-card"><p>Open</p><strong id="openTickets">0</strong></div>
+            <div class="stat-card"><p>In Progress</p><strong id="inProgressTickets">0</strong></div>
+            <div class="stat-card"><p>Resolved</p><strong id="resolvedTickets">0</strong></div>
+        </div>
+        <p id="statsMessage" class="message" role="status"></p>
+    </section>
+
+    <section class="panel">
+        <h2>Add a new asset</h2>
+        <form id="asset-form">
+            <div class="form-grid">
+                <input id="name" placeholder="Asset name" required>
+                <input id="type" placeholder="Asset type" required>
+                <input id="location" placeholder="Location" required>
+            </div>
+            <button type="submit">Add Asset</button>
+        </form>
+        <p id="status" class="message" role="status"></p>
+    </section>
+
+    <section class="panel">
+        <h2>Registered assets</h2>
+        <input id="search" type="text" placeholder="Search by ID, name, type or location...">
+        <button id="refresh" type="button">Refresh list</button>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Location</th><th>Actions</th></tr></thead>
+                <tbody id="asset-list"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>AI Troubleshooting Assistant</h2>
+        <p>Describe a common IT issue to receive suggested first troubleshooting steps. This demo uses local rules and does not send your text to an AI service.</p>
+        <form id="diagnosisForm" class="ticket-form">
+            <label for="diagnosisCategory">Problem category</label>
+            <select id="diagnosisCategory">
+                <option value="auto">Auto-detect</option>
+                <option value="network">Wi-Fi / Network</option>
+                <option value="slow">Slow computer</option>
+                <option value="printer">Printer</option>
+                <option value="login">Login / Password</option>
+                <option value="software">Application / Software</option>
+            </select>
+            <label for="diagnosisDescription">Describe the problem</label>
+            <textarea id="diagnosisDescription" minlength="5" maxlength="2000" rows="4" placeholder="Example: My laptop connects to Wi-Fi but websites do not load..." required></textarea>
+            <div><button id="diagnoseButton" type="submit">Suggest Troubleshooting Steps</button></div>
+        </form>
+        <div id="diagnosisResult" class="diagnosis-result" role="status" aria-live="polite" hidden></div>
+    </section>
+
+    <section class="panel">
+        <h2>IT Support Tickets</h2>
+        <p>Report an IT problem and track its status.</p>
+        <form id="ticketForm" class="ticket-form">
+            <label for="ticketTitle">Problem title</label>
+            <input id="ticketTitle" type="text" minlength="3" maxlength="150" placeholder="e.g. Laptop cannot connect to Wi-Fi" required>
+            <label for="ticketDescription">Problem description</label>
+            <textarea id="ticketDescription" minlength="5" maxlength="2000" rows="4" placeholder="Describe the problem..." required></textarea>
+            <label for="ticketPriority">Priority</label>
+            <select id="ticketPriority">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+            </select>
+            <div><button id="submitTicket" type="submit">Submit Ticket</button></div>
+        </form>
+        <p id="ticketMessage" class="message" role="status"></p>
+        <h3>Existing Tickets</h3>
+        <div class="ticket-filters">
+            <div>
+                <label for="ticketStatusFilter">Filter by status</label>
+                <select id="ticketStatusFilter">
+                    <option value="All">All statuses</option>
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                </select>
+            </div>
+            <div>
+                <label for="ticketPriorityFilter">Filter by priority</label>
+                <select id="ticketPriorityFilter">
+                    <option value="All">All priorities</option>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                </select>
+            </div>
+        </div>
+        <p id="ticketFilterMessage" class="message" role="status"></p>
+        <button id="refreshTickets" type="button">Refresh Tickets</button>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Update Status</th></tr></thead>
+                <tbody id="ticketsTableBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<script>
+"use strict";
+
+const API_URL = "http://127.0.0.1:8000";
+const TICKETS_API = `${API_URL}/tickets`;
+
+// Asset management
+const assetForm = document.getElementById("asset-form");
+const statusBox = document.getElementById("status");
+const assetList = document.getElementById("asset-list");
+const searchInput = document.getElementById("search");
+let allAssets = [];
+
+function displayAssets(assets) {
+    assetList.replaceChildren();
+
+    if (assets.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = "No assets found.";
+        row.appendChild(cell);
+        assetList.appendChild(row);
+        return;
+    }
+
+    assets.forEach(asset => {
+        const row = document.createElement("tr");
+        [asset.id, asset.name, asset.type, asset.location].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = String(value ?? "");
+            row.appendChild(cell);
+        });
+
+        const actionsCell = document.createElement("td");
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.textContent = "Delete";
+        deleteButton.style.background = "#dc2626";
+        deleteButton.addEventListener("click", async () => {
+            if (!confirm(`Are you sure you want to delete "${asset.name}"?`)) return;
+            deleteButton.disabled = true;
+            try {
+                const response = await fetch(`${API_URL}/assets/${asset.id}`, { method: "DELETE" });
+                if (!response.ok) throw new Error("Delete failed");
+                statusBox.textContent = "Asset deleted successfully.";
+                await loadAssets();
+            } catch (error) {
+                statusBox.textContent = `Could not delete asset: ${error.message}`;
+            } finally {
+                deleteButton.disabled = false;
+            }
+        });
+        actionsCell.appendChild(deleteButton);
+        row.appendChild(actionsCell);
+        assetList.appendChild(row);
+    });
+}
+
+function filterAssets() {
+    const query = searchInput.value.toLowerCase().trim();
+    const filtered = allAssets.filter(asset =>
+        [asset.id, asset.name, asset.type, asset.location]
+            .some(value => String(value ?? "").toLowerCase().includes(query))
+    );
+    displayAssets(filtered);
+}
+
+async function loadAssets() {
+    try {
+        const response = await fetch(`${API_URL}/assets`);
+        if (!response.ok) throw new Error("Could not load assets");
+        allAssets = await response.json();
+        filterAssets();
+        statusBox.textContent = `Loaded ${allAssets.length} asset(s).`;
+    } catch (error) {
+        statusBox.textContent = "Cannot load assets. Check the API server.";
+        console.error(error);
+    }
+}
+
+searchInput.addEventListener("input", filterAssets);
+document.getElementById("refresh").addEventListener("click", loadAssets);
+
+assetForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const asset = {
+        name: document.getElementById("name").value.trim(),
+        type: document.getElementById("type").value.trim(),
+        location: document.getElementById("location").value.trim()
+    };
+    try {
+        const response = await fetch(`${API_URL}/assets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(asset)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail ? JSON.stringify(result.detail) : "Asset could not be added");
+        assetForm.reset();
+        await loadAssets();
+        statusBox.textContent = "Asset added successfully.";
+    } catch (error) {
+        statusBox.textContent = `Could not add asset: ${error.message}`;
+        console.error(error);
+    }
+});
+
+// Local rule-based troubleshooting assistant (demo; not a connected LLM)
+const diagnosisForm = document.getElementById("diagnosisForm");
+const diagnosisCategory = document.getElementById("diagnosisCategory");
+const diagnosisDescription = document.getElementById("diagnosisDescription");
+const diagnosisResult = document.getElementById("diagnosisResult");
+
+const troubleshootingGuides = {
+    network: {
+        title: "Network / Wi-Fi connection",
+        steps: [
+            "Check that Wi-Fi is enabled and Airplane mode is off.",
+            "Check whether another device can connect to the same network.",
+            "Disconnect and reconnect to Wi-Fi; confirm the password is correct.",
+            "Restart the computer and, if appropriate, the router.",
+            "If the issue continues, record any error message and escalate to IT support."
+        ]
+    },
+    slow: {
+        title: "Slow computer",
+        steps: [
+            "Save your work and restart the computer if it has been running for a long time.",
+            "Close unused applications and browser tabs.",
+            "Open Task Manager and check whether CPU, memory, or disk usage stays unusually high.",
+            "Check available disk space and install approved operating-system updates.",
+            "Do not delete system files; if performance remains poor, collect the symptoms for IT support."
+        ]
+    },
+    printer: {
+        title: "Printer issue",
+        steps: [
+            "Check that the printer is powered on and has paper and ink or toner.",
+            "Check the display for an error and confirm the computer uses the correct printer.",
+            "For a network printer, verify that the printer and computer are connected to the network.",
+            "Check the print queue for paused or stuck jobs; cancel only your own stuck job if permitted.",
+            "Print a test page and escalate if the error persists."
+        ]
+    },
+    login: {
+        title: "Login / password issue",
+        steps: [
+            "Check the username, keyboard layout, Caps Lock, and network connection.",
+            "If available, use the organisation's official password-reset process.",
+            "Check whether the account is locked or the password has expired.",
+            "Never share your password or verification codes with anyone.",
+            "Contact the authorised administrator if access is still blocked."
+        ]
+    },
+    software: {
+        title: "Application / software issue",
+        steps: [
+            "Write down the exact error message and what you were doing when it appeared.",
+            "Save your work, close the application, and reopen it.",
+            "Check whether the application or service is available to other users, if appropriate.",
+            "Restart the computer and check for approved application updates.",
+            "Do not install unknown software; provide the error details to IT support if unresolved."
+        ]
+    },
+    general: {
+        title: "General IT troubleshooting",
+        steps: [
+            "Identify what is not working and when the issue started.",
+            "Record the exact error message and any recent changes.",
+            "Check power, cables, connectivity, and whether the issue affects other users.",
+            "Restart the affected application or device only after saving your work.",
+            "If the problem persists, create a support ticket and include the steps already tried."
+        ]
+    }
+};
+
+function detectIssue(text) {
+    const value = text.toLowerCase();
+    if (/wi.?fi|wifi|network|internet|router|connection|connect to web|websites? do not load/.test(value)) return "network";
+    if (/slow|freez|hang|performance|takes too long|running slowly/.test(value)) return "slow";
+    if (/printer|printing|print queue|toner|paper jam/.test(value)) return "printer";
+    if (/password|login|log in|sign in|locked account|cannot access account/.test(value)) return "login";
+    if (/application|app |software|program|crash|error message/.test(value)) return "software";
+    return "general";
+}
+
+diagnosisForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const description = diagnosisDescription.value.trim();
+    const category = diagnosisCategory.value === "auto" ? detectIssue(description) : diagnosisCategory.value;
+    const guide = troubleshootingGuides[category] || troubleshootingGuides.general;
+
+    diagnosisResult.replaceChildren();
+    diagnosisResult.hidden = false;
+    const heading = document.createElement("h3");
+    heading.textContent = `Suggested steps: ${guide.title}`;
+    diagnosisResult.appendChild(heading);
+    const intro = document.createElement("p");
+    intro.textContent = "Try these safe first checks in order:";
+    diagnosisResult.appendChild(intro);
+    const list = document.createElement("ol");
+    guide.steps.forEach(step => {
+        const item = document.createElement("li");
+        item.textContent = step;
+        list.appendChild(item);
+    });
+    diagnosisResult.appendChild(list);
+    const note = document.createElement("p");
+    note.textContent = "Note: These are general suggestions, not a confirmed diagnosis. Follow your organisation's IT and security policies.";
+    diagnosisResult.appendChild(note);
+});
+
+// Ticket management
+const ticketForm = document.getElementById("ticketForm");
+const ticketMessage = document.getElementById("ticketMessage");
+const ticketsTableBody = document.getElementById("ticketsTableBody");
+const submitTicketButton = document.getElementById("submitTicket");
+
+function updateDashboardStats(tickets) {
+    document.getElementById("totalTickets").textContent = tickets.length;
+    document.getElementById("openTickets").textContent =
+        tickets.filter(ticket => ticket.status === "Open").length;
+    document.getElementById("inProgressTickets").textContent =
+        tickets.filter(ticket => ticket.status === "In Progress").length;
+    document.getElementById("resolvedTickets").textContent =
+        tickets.filter(ticket => ticket.status === "Resolved").length;
+    document.getElementById("statsMessage").textContent = "Statistics updated.";
+}
+
+let allTickets = [];
+const ticketStatusFilter = document.getElementById("ticketStatusFilter");
+const ticketPriorityFilter = document.getElementById("ticketPriorityFilter");
+const ticketFilterMessage = document.getElementById("ticketFilterMessage");
+
+function displayTickets(tickets) {
+    const selectedStatus = ticketStatusFilter.value;
+    const selectedPriority = ticketPriorityFilter.value;
+    const filteredTickets = tickets.filter(ticket => {
+        const matchesStatus = selectedStatus === "All" || ticket.status === selectedStatus;
+        const matchesPriority = selectedPriority === "All" || ticket.priority === selectedPriority;
+        return matchesStatus && matchesPriority;
+    });
+
+    ticketsTableBody.replaceChildren();
+    ticketFilterMessage.textContent = `Showing ${filteredTickets.length} of ${tickets.length} ticket(s).`;
+
+    if (filteredTickets.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = tickets.length === 0 ? "No tickets found." : "No tickets match these filters.";
+        row.appendChild(cell);
+        ticketsTableBody.appendChild(row);
+        return;
+    }
+
+    filteredTickets.forEach(ticket => {
+        const row = document.createElement("tr");
+        [ticket.id, ticket.title, ticket.priority, ticket.status].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = String(value ?? "");
+            row.appendChild(cell);
+        });
+
+        const actionCell = document.createElement("td");
+        const statusSelect = document.createElement("select");
+        statusSelect.setAttribute("aria-label", `Status for ticket ${ticket.id}`);
+        ["Open", "In Progress", "Resolved", "Closed"].forEach(status => {
+            const option = document.createElement("option");
+            option.value = status;
+            option.textContent = status;
+            statusSelect.appendChild(option);
+        });
+        statusSelect.value = ticket.status;
+
+        statusSelect.addEventListener("change", async () => {
+            const newStatus = statusSelect.value;
+            statusSelect.disabled = true;
+            ticketMessage.textContent = `Updating ticket #${ticket.id}...`;
+            try {
+                const url = `${TICKETS_API}/${ticket.id}/status?status=${encodeURIComponent(newStatus)}`;
+                const updateResponse = await fetch(url, { method: "PATCH" });
+                const result = await updateResponse.json();
+                if (!updateResponse.ok) {
+                    throw new Error(result.detail ? JSON.stringify(result.detail) : "Status update failed");
+                }
+                ticketMessage.textContent = `Ticket #${ticket.id} status updated to ${result.status}.`;
+                await loadTickets();
+            } catch (error) {
+                ticketMessage.textContent = `Could not update status: ${error.message}`;
+                console.error(error);
+                await loadTickets();
+            }
+        });
+
+        actionCell.appendChild(statusSelect);
+        row.appendChild(actionCell);
+        ticketsTableBody.appendChild(row);
+    });
+}
+
+function applyTicketFilters() {
+    displayTickets(allTickets);
+}
+
+async function loadTickets() {
+    try {
+        const response = await fetch(TICKETS_API);
+        if (!response.ok) throw new Error("Could not load tickets");
+        allTickets = await response.json();
+        updateDashboardStats(allTickets);
+        displayTickets(allTickets);
+    } catch (error) {
+        ticketMessage.textContent = "Could not load tickets. Check the API server and CORS settings.";
+        console.error(error);
+    }
+}
+
+ticketStatusFilter.addEventListener("change", applyTicketFilters);
+ticketPriorityFilter.addEventListener("change", applyTicketFilters);
+
+ticketForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const ticket = {
+        title: document.getElementById("ticketTitle").value.trim(),
+        description: document.getElementById("ticketDescription").value.trim(),
+        priority: document.getElementById("ticketPriority").value
+    };
+    submitTicketButton.disabled = true;
+    ticketMessage.textContent = "Submitting ticket...";
+    try {
+        const response = await fetch(TICKETS_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(ticket)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail ? JSON.stringify(result.detail) : "Ticket submission failed");
+        ticketMessage.textContent = `Ticket #${result.id} submitted successfully.`;
+        ticketForm.reset();
+        await loadTickets();
+    } catch (error) {
+        ticketMessage.textContent = `Error: ${error.message}`;
+        console.error(error);
+    } finally {
+        submitTicketButton.disabled = false;
+    }
+});
+
+document.getElementById("refreshTickets").addEventListener("click", loadTickets);
+
+loadAssets();
+loadTickets();
+</script>
+</body>
+</html>

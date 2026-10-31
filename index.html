@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITCare AI | IT Support Dashboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; background: #f3f6fb; color: #172033; }
+        header { background: #14213d; color: white; padding: 24px 7%; }
+        header h1 { margin: 0 0 8px; }
+        header p { margin: 0; color: #cbd5e1; }
+        main { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+        .panel { background: white; padding: 24px; border-radius: 12px; margin-bottom: 22px; box-shadow: 0 4px 16px #1720330d; }
+        .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        input, textarea, select, button { padding: 12px; border-radius: 7px; font-size: 15px; }
+        input, textarea, select { width: 100%; border: 1px solid #cbd5e1; background: white; color: #172033; }
+        button { border: none; background: #2563eb; color: white; cursor: pointer; margin-top: 12px; }
+        button:hover { background: #1d4ed8; }
+        button:disabled { opacity: .6; cursor: wait; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        th { background: #f8fafc; }
+        .message { margin-top: 12px; min-height: 1em; }
+        .ticket-form { display: grid; gap: 8px; }
+        @media (max-width: 650px) { .form-grid { grid-template-columns: 1fr; } .panel { padding: 16px; } }
+    </style>
+</head>
+<body>
+<header>
+    <h1>ITCare AI</h1>
+    <p>IT Asset Management & Support Dashboard</p>
+</header>
+
+<main>
+    <section class="panel">
+        <h2>Add a new asset</h2>
+        <form id="asset-form">
+            <div class="form-grid">
+                <input id="name" placeholder="Asset name" required>
+                <input id="type" placeholder="Asset type" required>
+                <input id="location" placeholder="Location" required>
+            </div>
+            <button type="submit">Add Asset</button>
+        </form>
+        <p id="status" class="message" role="status"></p>
+    </section>
+
+    <section class="panel">
+        <h2>Registered assets</h2>
+        <input id="search" type="text" placeholder="Search by ID, name, type or location...">
+        <button id="refresh" type="button">Refresh list</button>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Location</th><th>Actions</th></tr></thead>
+                <tbody id="asset-list"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>IT Support Tickets</h2>
+        <p>Report an IT problem and track its status.</p>
+        <form id="ticketForm" class="ticket-form">
+            <label for="ticketTitle">Problem title</label>
+            <input id="ticketTitle" type="text" minlength="3" maxlength="150" placeholder="e.g. Laptop cannot connect to Wi-Fi" required>
+            <label for="ticketDescription">Problem description</label>
+            <textarea id="ticketDescription" minlength="5" maxlength="2000" rows="4" placeholder="Describe the problem..." required></textarea>
+            <label for="ticketPriority">Priority</label>
+            <select id="ticketPriority">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+            </select>
+            <div><button id="submitTicket" type="submit">Submit Ticket</button></div>
+        </form>
+        <p id="ticketMessage" class="message" role="status"></p>
+        <h3>Existing Tickets</h3>
+        <button id="refreshTickets" type="button">Refresh Tickets</button>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Update Status</th></tr></thead>
+                <tbody id="ticketsTableBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<script>
+"use strict";
+
+const API_URL = "http://127.0.0.1:8000";
+const TICKETS_API = `${API_URL}/tickets`;
+
+// Asset management
+const assetForm = document.getElementById("asset-form");
+const statusBox = document.getElementById("status");
+const assetList = document.getElementById("asset-list");
+const searchInput = document.getElementById("search");
+let allAssets = [];
+
+function displayAssets(assets) {
+    assetList.replaceChildren();
+
+    if (assets.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = "No assets found.";
+        row.appendChild(cell);
+        assetList.appendChild(row);
+        return;
+    }
+
+    assets.forEach(asset => {
+        const row = document.createElement("tr");
+        [asset.id, asset.name, asset.type, asset.location].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = String(value ?? "");
+            row.appendChild(cell);
+        });
+
+        const actionsCell = document.createElement("td");
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.textContent = "Delete";
+        deleteButton.style.background = "#dc2626";
+        deleteButton.addEventListener("click", async () => {
+            if (!confirm(`Are you sure you want to delete "${asset.name}"?`)) return;
+            deleteButton.disabled = true;
+            try {
+                const response = await fetch(`${API_URL}/assets/${asset.id}`, { method: "DELETE" });
+                if (!response.ok) throw new Error("Delete failed");
+                statusBox.textContent = "Asset deleted successfully.";
+                await loadAssets();
+            } catch (error) {
+                statusBox.textContent = `Could not delete asset: ${error.message}`;
+            } finally {
+                deleteButton.disabled = false;
+            }
+        });
+        actionsCell.appendChild(deleteButton);
+        row.appendChild(actionsCell);
+        assetList.appendChild(row);
+    });
+}
+
+function filterAssets() {
+    const query = searchInput.value.toLowerCase().trim();
+    const filtered = allAssets.filter(asset =>
+        [asset.id, asset.name, asset.type, asset.location]
+            .some(value => String(value ?? "").toLowerCase().includes(query))
+    );
+    displayAssets(filtered);
+}
+
+async function loadAssets() {
+    try {
+        const response = await fetch(`${API_URL}/assets`);
+        if (!response.ok) throw new Error("Could not load assets");
+        allAssets = await response.json();
+        filterAssets();
+        statusBox.textContent = `Loaded ${allAssets.length} asset(s).`;
+    } catch (error) {
+        statusBox.textContent = "Cannot load assets. Check the API server.";
+        console.error(error);
+    }
+}
+
+searchInput.addEventListener("input", filterAssets);
+document.getElementById("refresh").addEventListener("click", loadAssets);
+
+assetForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const asset = {
+        name: document.getElementById("name").value.trim(),
+        type: document.getElementById("type").value.trim(),
+        location: document.getElementById("location").value.trim()
+    };
+    try {
+        const response = await fetch(`${API_URL}/assets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(asset)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail ? JSON.stringify(result.detail) : "Asset could not be added");
+        assetForm.reset();
+        await loadAssets();
+        statusBox.textContent = "Asset added successfully.";
+    } catch (error) {
+        statusBox.textContent = `Could not add asset: ${error.message}`;
+        console.error(error);
+    }
+});
+
+// Ticket management
+const ticketForm = document.getElementById("ticketForm");
+const ticketMessage = document.getElementById("ticketMessage");
+const ticketsTableBody = document.getElementById("ticketsTableBody");
+const submitTicketButton = document.getElementById("submitTicket");
+
+async function loadTickets() {
+    ticketsTableBody.replaceChildren();
+    try {
+        const response = await fetch(TICKETS_API);
+        if (!response.ok) throw new Error("Could not load tickets");
+        const tickets = await response.json();
+
+        if (tickets.length === 0) {
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+            cell.colSpan = 5;
+            cell.textContent = "No tickets found.";
+            row.appendChild(cell);
+            ticketsTableBody.appendChild(row);
+            return;
+        }
+
+        tickets.forEach(ticket => {
+            const row = document.createElement("tr");
+            [ticket.id, ticket.title, ticket.priority, ticket.status].forEach(value => {
+                const cell = document.createElement("td");
+                cell.textContent = String(value ?? "");
+                row.appendChild(cell);
+            });
+
+            const actionCell = document.createElement("td");
+            const statusSelect = document.createElement("select");
+            statusSelect.setAttribute("aria-label", `Status for ticket ${ticket.id}`);
+            ["Open", "In Progress", "Resolved", "Closed"].forEach(status => {
+                const option = document.createElement("option");
+                option.value = status;
+                option.textContent = status;
+                statusSelect.appendChild(option);
+            });
+            statusSelect.value = ticket.status;
+
+            statusSelect.addEventListener("change", async () => {
+                const newStatus = statusSelect.value;
+                statusSelect.disabled = true;
+                ticketMessage.textContent = `Updating ticket #${ticket.id}...`;
+                try {
+                    const url = `${TICKETS_API}/${ticket.id}/status?status=${encodeURIComponent(newStatus)}`;
+                    const updateResponse = await fetch(url, { method: "PATCH" });
+                    const result = await updateResponse.json();
+                    if (!updateResponse.ok) {
+                        throw new Error(result.detail ? JSON.stringify(result.detail) : "Status update failed");
+                    }
+                    ticketMessage.textContent = `Ticket #${ticket.id} status updated to ${result.status}.`;
+                    await loadTickets();
+                } catch (error) {
+                    ticketMessage.textContent = `Could not update status: ${error.message}`;
+                    console.error(error);
+                    await loadTickets();
+                }
+            });
+
+            actionCell.appendChild(statusSelect);
+            row.appendChild(actionCell);
+            ticketsTableBody.appendChild(row);
+        });
+    } catch (error) {
+        ticketMessage.textContent = "Could not load tickets. Check the API server and CORS settings.";
+        console.error(error);
+    }
+}
+
+ticketForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const ticket = {
+        title: document.getElementById("ticketTitle").value.trim(),
+        description: document.getElementById("ticketDescription").value.trim(),
+        priority: document.getElementById("ticketPriority").value
+    };
+    submitTicketButton.disabled = true;
+    ticketMessage.textContent = "Submitting ticket...";
+    try {
+        const response = await fetch(TICKETS_API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(ticket)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail ? JSON.stringify(result.detail) : "Ticket submission failed");
+        ticketMessage.textContent = `Ticket #${result.id} submitted successfully.`;
+        ticketForm.reset();
+        await loadTickets();
+    } catch (error) {
+        ticketMessage.textContent = `Error: ${error.message}`;
+        console.error(error);
+    } finally {
+        submitTicketButton.disabled = false;
+    }
+});
+
+document.getElementById("refreshTickets").addEventListener("click", loadTickets);
+
+loadAssets();
+loadTickets();
+</script>
+</body>
+</html>
